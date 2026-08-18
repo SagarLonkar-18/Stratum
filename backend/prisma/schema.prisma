@@ -1,0 +1,62 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+
+  workspaces Workspace[]
+}
+
+model Workspace {
+  id        String   @id @default(uuid())
+  ownerId   String
+  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  name      String
+  type      String // "personal" | "company"
+  createdAt DateTime @default(now())
+
+  documents Document[]
+  chunks    Chunk[]
+
+  @@index([ownerId])
+}
+
+model Document {
+  id          String    @id @default(uuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  filename    String
+  fileType    String // "pdf" | "csv"
+  status      String    @default("processing") // "processing" | "ready" | "failed"
+  uploadedAt  DateTime  @default(now())
+
+  chunks Chunk[]
+
+  @@index([workspaceId])
+}
+
+model Chunk {
+  id               String    @id @default(uuid())
+  documentId       String
+  document         Document  @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  workspaceId      String
+  workspace        Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  content          String
+  chunkIndex       Int
+  page             Int?
+  tokenCount       Int
+  chunkingStrategy String // "fixed" | "structure_aware"
+  createdAt        DateTime  @default(now())
+
+  @@index([workspaceId])
+  @@index([documentId])
+}
