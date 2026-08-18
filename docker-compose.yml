@@ -1,0 +1,52 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: rag_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: rag
+      POSTGRES_PASSWORD: rag_dev_password
+      POSTGRES_DB: rag_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rag -d rag_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: rag_backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://rag:rag_dev_password@postgres:5432/rag_db
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+      RERANKER_URL: http://reranker:8001
+      LLM_PROVIDER: ollama
+      EMBEDDING_PROVIDER: ollama
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  reranker:
+    build:
+      context: ./reranker
+      dockerfile: Dockerfile
+    container_name: rag_reranker
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+
+volumes:
+  pgdata:
