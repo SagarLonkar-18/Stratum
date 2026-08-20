@@ -23,3 +23,29 @@ export async function createWorkspace(req: Request, res: Response) {
 		return res.status(500).json({ error: "internal server error" });
 	}
 }
+
+export async function getWorkspace(req: Request, res: Response) {
+	const workspaceId = req.params.workspaceId;
+
+	if (!workspaceId || Array.isArray(workspaceId)) {
+		return res.status(400).json({ error: "workspaceId is required" });
+	}
+
+	const workspace = await prisma.workspace.findUnique({
+		where: { id: workspaceId },
+	});
+	return res.status(200).json(workspace);
+}
+
+export async function listWorkspaces(req: Request, res: Response) {
+	try {
+		const workspaces = await prisma.workspace.findMany({
+			where: { ownerId: req.userId },
+			orderBy: { createdAt: "desc" },
+		});
+		return res.status(200).json(workspaces);
+	} catch (err) {
+		console.error(err);
+		return res.status(500).json({ error: "internal server error" });
+	}
+}
