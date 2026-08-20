@@ -28,6 +28,7 @@ async function main() {
 			data: {
 				workspaceId: wsA.id,
 				filename: "personal-notes.pdf",
+				filePath: "uploads/test/personal-notes.pdf",
 				fileType: "pdf",
 				status: "ready",
 			},
@@ -38,6 +39,7 @@ async function main() {
 			data: {
 				workspaceId: wsB.id,
 				filename: "company-handbook.pdf",
+				filePath: "uploads/test/company-handbook.pdf",
 				fileType: "pdf",
 				status: "ready",
 			},

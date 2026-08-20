@@ -35,6 +35,7 @@ model Document {
   workspaceId String
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   filename    String
+  filePath    String
   fileType    String // "pdf" | "csv"
   status      String    @default("processing") // "processing" | "ready" | "failed"
   uploadedAt  DateTime  @default(now())
