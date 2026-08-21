@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import fs from "fs/promises";
 import path from "path";
+import { PDFParse } from "pdf-parse";
 import { withWorkspace } from "../db/withWorkspace";
 
 export async function uploadDocument(req: Request, res: Response) {
@@ -15,8 +16,6 @@ export async function uploadDocument(req: Request, res: Response) {
 	}
 
 	try {
-		// Create the Document row first so we have a real ID to namespace
-		// the final file path by.
 		const document = await withWorkspace(workspaceId, (tx) =>
 			tx.document.create({
 				data: {
@@ -39,6 +38,17 @@ export async function uploadDocument(req: Request, res: Response) {
 		await fs.rename(req.file.path, finalPath);
 
 		const relativePath = path.relative(process.cwd(), finalPath);
+
+		const fileBuffer = await fs.readFile(finalPath);
+		const parser = new PDFParse({ data: fileBuffer });
+		const result = await parser.getText();
+		await parser.destroy();
+
+		console.log("\n--- Extracted PDF text (first 500 chars) ---");
+		console.log(result.text.slice(0, 500));
+		console.log("--- End preview ---");
+		console.log(`Total extracted characters: ${result.text.length}`);
+		console.log(`Reported page count: ${result.total}\n`);
 
 		const updated = await withWorkspace(workspaceId, (tx) =>
 			tx.document.update({
