@@ -3,6 +3,7 @@ import fs from "fs/promises";
 import path from "path";
 import { PDFParse } from "pdf-parse";
 import { withWorkspace } from "../db/withWorkspace";
+import { chunkTextFixedSize } from "../lib/chunking/fixedSizeChunker";
 
 export async function uploadDocument(req: Request, res: Response) {
 	const { workspaceId } = req.params;
@@ -49,6 +50,27 @@ export async function uploadDocument(req: Request, res: Response) {
 		console.log("--- End preview ---");
 		console.log(`Total extracted characters: ${result.text.length}`);
 		console.log(`Reported page count: ${result.total}\n`);
+
+		const chunks = chunkTextFixedSize(result.text);
+
+		console.log(
+			`Generated ${chunks.length} chunks (fixed-size strategy)\n`,
+		);
+
+		await withWorkspace(workspaceId, async (tx) => {
+			for (const chunk of chunks) {
+				await tx.chunk.create({
+					data: {
+						documentId: document.id,
+						workspaceId,
+						content: chunk.content,
+						chunkIndex: chunk.chunkIndex,
+						tokenCount: Math.round(chunk.content.length / 4), // rough approximation
+						chunkingStrategy: "fixed",
+					},
+				});
+			}
+		});
 
 		const updated = await withWorkspace(workspaceId, (tx) =>
 			tx.document.update({
