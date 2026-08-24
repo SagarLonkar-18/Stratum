@@ -4,6 +4,7 @@ import path from "path";
 import { PDFParse } from "pdf-parse";
 import { withWorkspace } from "../db/withWorkspace";
 import { chunkTextFixedSize } from "../lib/chunking/fixedSizeChunker";
+import { generateEmbedding } from "../lib/embeddings/ollamaEmbeddings";
 
 export async function uploadDocument(req: Request, res: Response) {
 	const { workspaceId } = req.params;
@@ -59,16 +60,31 @@ export async function uploadDocument(req: Request, res: Response) {
 
 		await withWorkspace(workspaceId, async (tx) => {
 			for (const chunk of chunks) {
-				await tx.chunk.create({
+				const embedding = await generateEmbedding(chunk.content);
+
+				const created = await tx.chunk.create({
 					data: {
 						documentId: document.id,
 						workspaceId,
 						content: chunk.content,
 						chunkIndex: chunk.chunkIndex,
-						tokenCount: Math.round(chunk.content.length / 4), // rough approximation
+						tokenCount: Math.round(chunk.content.length / 4),
 						chunkingStrategy: "fixed",
 					},
 				});
+
+				// pgvector isn't a Prisma-native type, so we set it via raw SQL,
+				// using the vector's own string representation: '[0.1,0.2,...]'
+				const vectorLiteral = `[${embedding.join(",")}]`;
+				await tx.$executeRawUnsafe(
+					`UPDATE "Chunk" SET embedding = $1::vector WHERE id = $2`,
+					vectorLiteral,
+					created.id,
+				);
+
+				console.log(
+					`  Embedded chunk ${chunk.chunkIndex} (${embedding.length} dims)`,
+				);
 			}
 		});
 

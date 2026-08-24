@@ -57,6 +57,7 @@ model Chunk {
   tokenCount       Int
   chunkingStrategy String // "fixed" | "structure_aware"
   createdAt        DateTime  @default(now())
+  embedding        Unsupported("vector(768)")?
 
   @@index([workspaceId])
   @@index([documentId])
