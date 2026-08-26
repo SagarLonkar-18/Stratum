@@ -4,6 +4,7 @@ import path from "path";
 import { PDFParse } from "pdf-parse";
 import { withWorkspace } from "../db/withWorkspace";
 import { chunkTextFixedSize } from "../lib/chunking/fixedSizeChunker";
+import { chunkTextStructureAware } from "../lib/chunking/structureAwareChunker";
 import { generateEmbedding } from "../lib/embeddings/ollamaEmbeddings";
 
 export async function uploadDocument(req: Request, res: Response) {
@@ -52,41 +53,49 @@ export async function uploadDocument(req: Request, res: Response) {
 		console.log(`Total extracted characters: ${result.text.length}`);
 		console.log(`Reported page count: ${result.total}\n`);
 
-		const chunks = chunkTextFixedSize(result.text);
+		const strategies = [
+			{ name: "fixed" as const, chunks: chunkTextFixedSize(result.text) },
+			{
+				name: "structure_aware" as const,
+				chunks: chunkTextStructureAware(result.text),
+			},
+		];
 
-		console.log(
-			`Generated ${chunks.length} chunks (fixed-size strategy)\n`,
-		);
+		for (const strategy of strategies) {
+			console.log(
+				`Generated ${strategy.chunks.length} chunks (${strategy.name} strategy)`,
+			);
 
-		await withWorkspace(workspaceId, async (tx) => {
-			for (const chunk of chunks) {
-				const embedding = await generateEmbedding(chunk.content);
+			await withWorkspace(workspaceId, async (tx) => {
+				for (const chunk of strategy.chunks) {
+					const embedding = await generateEmbedding(chunk.content);
 
-				const created = await tx.chunk.create({
-					data: {
-						documentId: document.id,
-						workspaceId,
-						content: chunk.content,
-						chunkIndex: chunk.chunkIndex,
-						tokenCount: Math.round(chunk.content.length / 4),
-						chunkingStrategy: "fixed",
-					},
-				});
+					const created = await tx.chunk.create({
+						data: {
+							documentId: document.id,
+							workspaceId,
+							content: chunk.content,
+							chunkIndex: chunk.chunkIndex,
+							tokenCount: Math.round(chunk.content.length / 4),
+							chunkingStrategy: strategy.name,
+						},
+					});
 
-				// pgvector isn't a Prisma-native type, so we set it via raw SQL,
-				// using the vector's own string representation: '[0.1,0.2,...]'
-				const vectorLiteral = `[${embedding.join(",")}]`;
-				await tx.$executeRawUnsafe(
-					`UPDATE "Chunk" SET embedding = $1::vector WHERE id = $2`,
-					vectorLiteral,
-					created.id,
-				);
+					const vectorLiteral = `[${embedding.join(",")}]`;
+					await tx.$executeRawUnsafe(
+						`UPDATE "Chunk" SET embedding = $1::vector WHERE id = $2`,
+						vectorLiteral,
+						created.id,
+					);
 
-				console.log(
-					`  Embedded chunk ${chunk.chunkIndex} (${embedding.length} dims)`,
-				);
-			}
-		});
+					console.log(
+						`  [${strategy.name}] Embedded chunk ${chunk.chunkIndex} (${embedding.length} dims)`,
+					);
+				}
+			});
+		}
+
+		console.log("");
 
 		const updated = await withWorkspace(workspaceId, (tx) =>
 			tx.document.update({
