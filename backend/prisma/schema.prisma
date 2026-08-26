@@ -26,6 +26,7 @@ model Workspace {
 
   documents Document[]
   chunks    Chunk[]
+  questions EvalQuestion[]
 
   @@index([ownerId])
 }
@@ -61,4 +62,17 @@ model Chunk {
 
   @@index([workspaceId])
   @@index([documentId])
+}
+
+model EvalQuestion {
+  id               String    @id @default(uuid())
+  workspaceId      String
+  workspace        Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  question         String
+  expectedChunkIds String[]  // ground truth: which chunk(s) should be retrieved for this question
+  chunkingStrategy String    // "fixed" | "structure_aware" — since chunk IDs differ per strategy,
+                              // each question is tied to one strategy's chunk set
+  createdAt        DateTime  @default(now())
+
+  @@index([workspaceId])
 }
