@@ -59,6 +59,7 @@ model Chunk {
   chunkingStrategy String // "fixed" | "structure_aware"
   createdAt        DateTime  @default(now())
   embedding        Unsupported("vector(768)")?
+  contentTsv Unsupported("tsvector")? @map("content_tsv")
 
   @@index([workspaceId])
   @@index([documentId])
