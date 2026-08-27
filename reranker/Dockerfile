@@ -1,4 +1,12 @@
-# Placeholder for this step only — proves docker-compose wiring works.
-# Real FastAPI + cross-encoder service gets added in Phase 4.
 FROM python:3.11-slim
-CMD ["python3", "-u", "-c", "print('reranker placeholder up'); import time; time.sleep(999999)"]
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+EXPOSE 8001
+
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001"]
