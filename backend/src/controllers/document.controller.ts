@@ -66,10 +66,28 @@ export async function uploadDocument(req: Request, res: Response) {
 				`Generated ${strategy.chunks.length} chunks (${strategy.name} strategy)`,
 			);
 
-			await withWorkspace(workspaceId, async (tx) => {
-				for (const chunk of strategy.chunks) {
-					const embedding = await generateEmbedding(chunk.content);
+			// Step 1: embed every chunk OUTSIDE any database transaction, since
+			// embedding is a slow external network call with no DB dependency.
+			// Holding a transaction open across dozens of sequential network
+			// calls risks exceeding Prisma's interactive transaction timeout.
+			const embeddedChunks: {
+				chunk: (typeof strategy.chunks)[number];
+				embedding: number[];
+			}[] = [];
+			for (const chunk of strategy.chunks) {
+				const embedding = await generateEmbedding(chunk.content);
+				embeddedChunks.push({ chunk, embedding });
+				console.log(
+					`  [${strategy.name}] Embedded chunk ${chunk.chunkIndex} (${embedding.length} dims)`,
+				);
+			}
 
+			// Step 2: now that all embeddings are ready, write everything to the
+			// database inside one short-lived transaction — only fast DB writes
+			// happen here, so this stays well within the timeout regardless of
+			// how many chunks there are.
+			await withWorkspace(workspaceId, async (tx) => {
+				for (const { chunk, embedding } of embeddedChunks) {
 					const created = await tx.chunk.create({
 						data: {
 							documentId: document.id,
@@ -86,10 +104,6 @@ export async function uploadDocument(req: Request, res: Response) {
 						`UPDATE "Chunk" SET embedding = $1::vector WHERE id = $2`,
 						vectorLiteral,
 						created.id,
-					);
-
-					console.log(
-						`  [${strategy.name}] Embedded chunk ${chunk.chunkIndex} (${embedding.length} dims)`,
 					);
 				}
 			});

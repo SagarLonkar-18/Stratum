@@ -16,7 +16,7 @@ const ALLOWED_MIME_TYPES = ["application/pdf"];
 
 export const upload = multer({
 	storage,
-	limits: { fileSize: 20 * 1024 * 1024 }, // 20MB cap
+	limits: { fileSize: 50 * 1024 * 1024 }, // 50MB cap
 	fileFilter: (_req, file, cb) => {
 		if (!ALLOWED_MIME_TYPES.includes(file.mimetype)) {
 			return cb(new Error("only PDF files are supported"));
