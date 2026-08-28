@@ -1,0 +1,136 @@
+<svg width="1500" height="900" viewBox="0 0 1500 900" xmlns="http://www.w3.org/2000/svg" role="img">
+  <title>Stratum system architecture</title>
+  <desc>A client sends an authenticated question to the API. The API embeds the question via Ollama, runs hybrid search (vector + full-text) against Postgres scoped by Row-Level Security, sends the candidates to the reranker service, then sends the reranked chunks back to Ollama to generate a cited answer, which is returned to the client alongside its source chunks.</desc>
+
+  <defs>
+    <filter id="rough" x="-20%" y="-20%" width="140%" height="140%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.018 0.03" numOctaves="2" seed="7" result="n"/>
+      <feDisplacementMap in="SourceGraphic" in2="n" scale="3.2" xChannelSelector="R" yChannelSelector="G"/>
+    </filter>
+    <filter id="roughSoft" x="-20%" y="-20%" width="140%" height="140%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.012 0.02" numOctaves="2" seed="11" result="n2"/>
+      <feDisplacementMap in="SourceGraphic" in2="n2" scale="1.8" xChannelSelector="R" yChannelSelector="G"/>
+    </filter>
+    <marker id="arrow" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M1.5 1.5L8 5L1.5 8.5" fill="none" stroke="#aab0c4" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+    <marker id="arrowDim" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M1.5 1.5L8 5L1.5 8.5" fill="none" stroke="#7d8399" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+    <marker id="arrowAccent" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M1.5 1.5L8 5L1.5 8.5" fill="none" stroke="#7fb0a0" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1500" height="900" fill="#1a1f1c"/>
+
+  <!-- ===================== DOCKER BOUNDARY ===================== -->
+  <g filter="url(#roughSoft)">
+    <rect x="440" y="60" width="760" height="560" rx="10" fill="none" stroke="#4a5058" stroke-width="1.6" stroke-dasharray="2 8"/>
+  </g>
+  <text x="460" y="88" font-family="Helvetica, Arial, sans-serif" font-size="13" fill="#6b7280">docker compose (backend + postgres + reranker)</text>
+
+  <!-- ===================== ARROWS ===================== -->
+
+  <!-- Client -> API -->
+  <path d="M 150 330 C 220 328, 300 330, 370 330" fill="none" stroke="#aab0c4" stroke-width="1.6" filter="url(#roughSoft)" marker-end="url(#arrow)"/>
+  <text x="165" y="314" font-family="Helvetica, Arial, sans-serif" font-size="14.5" fill="#c9cdd9">POST /chat, REST + JWT</text>
+
+  <!-- API -> Client (dashed return) -->
+  <path d="M 370 372 C 300 400, 220 400, 150 372" fill="none" stroke="#7fb0a0" stroke-width="1.5" stroke-dasharray="1 7" stroke-linecap="round" filter="url(#roughSoft)" marker-end="url(#arrowAccent)"/>
+  <text x="170" y="418" font-family="Helvetica, Arial, sans-serif" font-size="14" fill="#8fb8a8">answer + cited chunks</text>
+
+  <!-- API -> Ollama (embed question) -->
+  <path d="M 590 300 C 660 240, 760 190, 850 165" fill="none" stroke="#aab0c4" stroke-width="1.6" filter="url(#roughSoft)" marker-end="url(#arrow)"/>
+  <text x="600" y="230" font-family="Helvetica, Arial, sans-serif" font-size="14" fill="#c9cdd9">1. embed question</text>
+
+  <!-- API -> Postgres (hybrid search) -->
+  <path d="M 560 400 C 545 445, 535 485, 528 520" fill="none" stroke="#aab0c4" stroke-width="1.6" filter="url(#roughSoft)" marker-end="url(#arrow)"/>
+  <text x="410" y="450" font-family="Helvetica, Arial, sans-serif" font-size="14" fill="#c9cdd9">2. hybrid search</text>
+  <text x="410" y="468" font-family="Helvetica, Arial, sans-serif" font-size="12" fill="#9298ac">vector &lt;=&gt; + full-text, RLS-scoped</text>
+
+  <!-- Postgres -> API dashed (candidates) -->
+  <path d="M 610 520 C 625 480, 635 445, 645 405" fill="none" stroke="#7d8399" stroke-width="1.5" stroke-dasharray="1 7" stroke-linecap="round" filter="url(#roughSoft)" marker-end="url(#arrowDim)"/>
+  <text x="645" y="470" font-family="Helvetica, Arial, sans-serif" font-size="13" fill="#9298ac">top-20 candidates</text>
+
+  <!-- API -> Reranker -->
+  <path d="M 700 360 C 780 355, 860 350, 940 345" fill="none" stroke="#aab0c4" stroke-width="1.6" filter="url(#roughSoft)" marker-end="url(#arrow)"/>
+  <text x="720" y="335" font-family="Helvetica, Arial, sans-serif" font-size="14" fill="#c9cdd9">3. rerank</text>
+
+  <!-- Reranker -> API dashed -->
+  <path d="M 940 390 C 860 400, 780 405, 700 400" fill="none" stroke="#7d8399" stroke-width="1.5" stroke-dasharray="1 7" stroke-linecap="round" filter="url(#roughSoft)" marker-end="url(#arrowDim)"/>
+  <text x="720" y="420" font-family="Helvetica, Arial, sans-serif" font-size="13" fill="#9298ac">top-5, cross-encoder scored</text>
+
+  <!-- API -> Ollama (generate) -->
+  <path d="M 640 300 C 720 250, 800 195, 855 175" fill="none" stroke="#aab0c4" stroke-width="1.6" filter="url(#roughSoft)" marker-end="url(#arrow)"/>
+  <text x="700" y="285" font-family="Helvetica, Arial, sans-serif" font-size="14" fill="#c9cdd9">4. generate answer</text>
+
+  <!-- Upload path: Client -> API -> Postgres/disk (separate, lower) -->
+  <path d="M 260 700 C 350 700, 440 680, 505 630" fill="none" stroke="#7fb0a0" stroke-width="1.5" filter="url(#roughSoft)" marker-end="url(#arrowAccent)"/>
+  <text x="270" y="720" font-family="Helvetica, Arial, sans-serif" font-size="14" fill="#8fb8a8">POST /documents (upload)</text>
+
+  <!-- API -> Ollama for embedding chunks during ingest -->
+  <path d="M 620 600 C 700 500, 780 300, 850 190" fill="none" stroke="#5a6270" stroke-width="1.4" stroke-dasharray="1 9" stroke-linecap="round" filter="url(#roughSoft)"/>
+  <text x="770" y="500" font-family="Helvetica, Arial, sans-serif" font-size="12.5" fill="#7d8399">chunk + embed each strategy</text>
+
+  <!-- ===================== NODES ===================== -->
+
+  <!-- Client -->
+  <g filter="url(#rough)">
+    <circle cx="95" cy="350" r="46" fill="#252b2a" stroke="#9098b0" stroke-width="1.8"/>
+  </g>
+  <text x="95" y="345" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="15" font-weight="600" fill="#eef0f5">Client</text>
+  <text x="95" y="363" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="11.5" fill="#9298ac">Postman / frontend</text>
+
+  <!-- Node.js API -->
+  <g filter="url(#rough)">
+    <rect x="470" y="300" width="220" height="100" rx="7" fill="#252b3a" stroke="#9098b0" stroke-width="1.8"/>
+  </g>
+  <text x="580" y="335" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="16.5" font-weight="700" fill="#eef0f5">Node.js API</text>
+  <text x="580" y="357" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="12.5" fill="#a7acc0">Express + TypeScript</text>
+  <text x="580" y="375" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="12.5" fill="#a7acc0">auth, workspaces, chat</text>
+
+  <!-- Ollama (host, outside docker boundary) -->
+  <g filter="url(#rough)">
+    <rect x="855" y="80" width="260" height="110" rx="7" fill="#2a2f26" stroke="#9098b0" stroke-width="1.8"/>
+  </g>
+  <text x="985" y="115" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="16.5" font-weight="700" fill="#eef0f5">Ollama</text>
+  <text x="985" y="137" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="12.5" fill="#a7acc0">runs natively on host (not Docker)</text>
+  <text x="985" y="155" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="12.5" fill="#a7acc0">nomic-embed-text + qwen2.5:7b</text>
+  <text x="985" y="173" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="11.5" fill="#7d8399">reached via host.docker.internal</text>
+
+  <!-- Postgres -->
+  <g filter="url(#rough)">
+    <rect x="475" y="520" width="230" height="110" rx="7" fill="#252b3a" stroke="#9098b0" stroke-width="1.8"/>
+  </g>
+  <text x="590" y="553" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="16" font-weight="700" fill="#eef0f5">PostgreSQL + pgvector</text>
+  <text x="590" y="575" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="12.5" fill="#a7acc0">Chunk.embedding + content_tsv</text>
+  <text x="590" y="593" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="12.5" fill="#d4a373">Row-Level Security enforced</text>
+  <text x="590" y="611" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="11" fill="#7d8399">fails closed if app.workspace_id unset</text>
+
+  <!-- Reranker -->
+  <g filter="url(#rough)">
+    <rect x="940" y="300" width="230" height="100" rx="7" fill="#252b3a" stroke="#9098b0" stroke-width="1.8"/>
+  </g>
+  <text x="1055" y="333" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="16" font-weight="700" fill="#eef0f5">Reranker</text>
+  <text x="1055" y="355" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="12.5" fill="#a7acc0">FastAPI + sentence-transformers</text>
+  <text x="1055" y="373" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="12.5" fill="#a7acc0">ms-marco-MiniLM-L-6-v2, CPU-only</text>
+
+  <!-- Local disk -->
+  <g filter="url(#rough)">
+    <rect x="475" y="680" width="230" height="90" rx="7" fill="#252b3a" stroke="#9098b0" stroke-width="1.8"/>
+  </g>
+  <text x="590" y="713" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="15.5" font-weight="700" fill="#eef0f5">Local disk</text>
+  <text x="590" y="733" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="12.5" fill="#a7acc0">uploads/&lt;workspaceId&gt;/</text>
+  <text x="590" y="751" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="11.5" fill="#7d8399">original PDFs, Docker volume</text>
+
+  <!-- ===================== legend ===================== -->
+  <path d="M 95 830 C 115 828, 130 831, 150 829" fill="none" stroke="#aab0c4" stroke-width="1.6" filter="url(#roughSoft)"/>
+  <text x="160" y="835" font-family="Helvetica, Arial, sans-serif" font-size="13.5" fill="#9298ac">request / query</text>
+  <path d="M 320 830 C 340 828, 355 831, 375 829" fill="none" stroke="#7d8399" stroke-width="1.5" stroke-dasharray="1 7" stroke-linecap="round" filter="url(#roughSoft)"/>
+  <text x="385" y="835" font-family="Helvetica, Arial, sans-serif" font-size="13.5" fill="#9298ac">response / candidates</text>
+  <path d="M 570 830 C 590 828, 605 831, 625 829" fill="none" stroke="#7fb0a0" stroke-width="1.5" filter="url(#roughSoft)"/>
+  <text x="635" y="835" font-family="Helvetica, Arial, sans-serif" font-size="13.5" fill="#8fb8a8">client-facing / ingest path</text>
+
+  <text x="95" y="875" font-family="Helvetica, Arial, sans-serif" font-size="14" fill="#7d8399">Every Document/Chunk query runs inside a transaction scoped to one workspace - RLS makes cross-tenant rows invisible, not just filtered.</text>
+</svg>
