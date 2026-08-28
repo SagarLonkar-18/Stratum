@@ -1,38 +1,10 @@
 import { prisma } from "../src/db/client";
 import { withWorkspace } from "../src/db/withWorkspace";
 import { generateEmbedding } from "../src/lib/embeddings/ollamaEmbeddings";
+import { hybridSearch } from "../src/lib/search/hybridSearch";
 
 const WORKSPACE_ID = "e8774480-7e08-4c4b-ba97-dc3a6b8d3944";
 const TOP_K = 5;
-
-interface RetrievalResult {
-	id: string;
-	distance: number;
-}
-
-async function retrieveTopK(
-	workspaceId: string,
-	question: string,
-	chunkingStrategy: string,
-	k: number,
-): Promise<RetrievalResult[]> {
-	const embedding = await generateEmbedding(question);
-	const vectorLiteral = `[${embedding.join(",")}]`;
-
-	return withWorkspace(workspaceId, (tx) =>
-		tx.$queryRawUnsafe<RetrievalResult[]>(
-			`SELECT id, embedding <=> $1::vector AS distance
-       FROM "Chunk"
-       WHERE "workspaceId" = $2 AND "chunkingStrategy" = $3
-       ORDER BY distance ASC
-       LIMIT $4`,
-			vectorLiteral,
-			workspaceId,
-			chunkingStrategy,
-			k,
-		),
-	);
-}
 
 async function main() {
 	const questions = await prisma.evalQuestion.findMany({
@@ -42,11 +14,17 @@ async function main() {
 	const results: Record<string, { hits: number; total: number }> = {};
 
 	for (const q of questions) {
-		const retrieved = await retrieveTopK(
-			WORKSPACE_ID,
-			q.question,
-			q.chunkingStrategy,
-			TOP_K,
+		const embedding = await generateEmbedding(q.question);
+
+		const retrieved = await withWorkspace(WORKSPACE_ID, (tx) =>
+			hybridSearch(
+				tx,
+				WORKSPACE_ID,
+				q.question,
+				embedding,
+				q.chunkingStrategy,
+				TOP_K,
+			),
 		);
 		const retrievedIds = retrieved.map((r) => r.id);
 
@@ -65,7 +43,7 @@ async function main() {
 		);
 	}
 
-	console.log("\n=== Hit Rate @ K=" + TOP_K + " ===");
+	console.log("\n=== Hybrid Search Hit Rate @ K=" + TOP_K + " ===");
 	for (const [strategy, { hits, total }] of Object.entries(results)) {
 		const rate = ((hits / total) * 100).toFixed(1);
 		console.log(`${strategy}: ${hits}/${total} = ${rate}%`);
