@@ -26,11 +26,11 @@ ${context}
 Question: ${question}
 
 Instructions:
-- Before answering, silently verify which chunk actually contains the specific fact — do not describe this verification process in your answer.
-- Answer using only the information in the chunks above, in a natural, direct tone.
-- After each claim, cite the exact chunk number where that specific fact appears, like [chunk 2].
-- Do not explain your reasoning, do not say things like "this is found in chunk X" or "let me verify" — just state the answer with the citation.
-- If the chunks don't contain the answer, say so clearly and directly, without narrating your reasoning process.
+- Answer using ONLY the information in the chunks above. Do not use any knowledge you have from training - including facts about yourself, your creator, or general world knowledge not present in the chunks.
+- Before answering, silently verify which chunk actually contains the specific fact - do not describe this verification process in your answer.
+- After each claim, cite the exact chunk number where that specific fact appears, like [chunk 2]. Never attach a citation to a claim the cited chunk does not actually support.
+- If the chunks don't contain the answer - including questions about your own identity, capabilities, or anything unrelated to the chunks - respond with exactly this sentence and nothing else: "The provided documents don't contain information about that." Do not add a citation to this sentence, since it isn't a claim drawn from any chunk.
+- Do not explain your reasoning, do not narrate your verification process.
 
 Answer:`;
 }
