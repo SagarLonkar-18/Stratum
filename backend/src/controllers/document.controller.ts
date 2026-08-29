@@ -124,3 +124,24 @@ export async function uploadDocument(req: Request, res: Response) {
 		return res.status(500).json({ error: "internal server error" });
 	}
 }
+
+export async function listDocuments(req: Request, res: Response) {
+	const { workspaceId } = req.params;
+
+	if (!workspaceId || Array.isArray(workspaceId)) {
+		return res.status(400).json({ error: "workspaceId is required" });
+	}
+
+	try {
+		const documents = await withWorkspace(workspaceId, (tx) =>
+			tx.document.findMany({
+				where: { workspaceId },
+				orderBy: { uploadedAt: "desc" },
+			}),
+		);
+		return res.status(200).json(documents);
+	} catch (err) {
+		console.error(err);
+		return res.status(500).json({ error: "internal server error" });
+	}
+}
