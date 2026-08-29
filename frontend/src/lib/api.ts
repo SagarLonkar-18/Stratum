@@ -92,6 +92,28 @@ export const api = {
 
 	listWorkspaces: () => request<Workspace[]>("/workspaces"),
 
+	updateWorkspace: (id: string, data: { name?: string; type?: string }) =>
+		request<Workspace>(`/workspaces/${id}`, {
+			method: "PATCH",
+			body: JSON.stringify(data),
+		}),
+
+	deleteWorkspace: async (id: string): Promise<void> => {
+		const headers: Record<string, string> = {};
+		if (authToken) headers.Authorization = `Bearer ${authToken}`;
+		const res = await fetch(`/workspaces/${id}`, {
+			method: "DELETE",
+			headers,
+		});
+		if (!res.ok) {
+			const body = await res.json().catch(() => ({}));
+			throw new ApiError(res.status, body.error ?? "Delete failed");
+		}
+	},
+
+	listDocuments: (workspaceId: string) =>
+		request<Document[]>(`/workspaces/${workspaceId}/documents`),
+
 	createWorkspace: (name: string, type: string) =>
 		request<Workspace>("/workspaces", {
 			method: "POST",
@@ -122,9 +144,6 @@ export const api = {
 		}
 		return res.json();
 	},
-
-	listDocuments: (workspaceId: string) =>
-		request<Document[]>(`/workspaces/${workspaceId}/documents`),
 
 	chat: (
 		workspaceId: string,
