@@ -1,0 +1,59 @@
+@import "tailwindcss";
+
+/*
+ * Design tokens for Stratum's UI, matching the visual language already
+ * established in docs/architecture-diagram.svg — a dark, warm-toned,
+ * precision-oriented palette, not the generic AI-slop defaults (warm
+ * cream/terracotta, or neon-on-black). Green is reserved specifically for
+ * "verified/grounded" states (citations, isolation checks) — it is a
+ * semantic signal, not a decorative accent used everywhere.
+ */
+@theme {
+  --font-display: "JetBrains Mono", ui-monospace, "SF Mono", monospace;
+  --font-body: "Inter", ui-sans-serif, system-ui, sans-serif;
+
+  --color-base-950: #0f1210;
+  --color-base-900: #151917;
+  --color-base-850: #1b201d;
+  --color-base-800: #1e2420;
+  --color-base-700: #2a322c;
+  --color-base-600: #3d463e;
+
+  --color-ink-100: #e8ebe6;
+  --color-ink-300: #b8c0ba;
+  --color-ink-500: #7a8a7f;
+  --color-ink-700: #4d5952;
+
+  --color-verified-500: #6fa88a;
+  --color-verified-400: #8bc0a4;
+  --color-verified-950: #17251e;
+
+  --color-source-500: #c9a15a;
+  --color-source-950: #241d10;
+
+  --color-danger-500: #c4695f;
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background: var(--color-base-900);
+  color: var(--color-ink-100);
+  font-family: var(--font-body);
+}
+
+/* Visible keyboard focus everywhere — not decorative, an accessibility floor. */
+:focus-visible {
+  outline: 2px solid var(--color-verified-400);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
