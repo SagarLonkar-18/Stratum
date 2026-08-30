@@ -327,7 +327,7 @@ export function ChatPage() {
 						<input
 							ref={fileInputRef}
 							type="file"
-							accept=".pdf"
+							accept=".pdf,.csv"
 							onChange={handleUpload}
 							className="hidden"
 						/>
@@ -346,7 +346,7 @@ export function ChatPage() {
 								</>
 							) : (
 								<>
-									<Upload size={13} /> Upload PDF
+									<Upload size={13} /> Upload PDF/CSV
 								</>
 							)}
 						</button>
