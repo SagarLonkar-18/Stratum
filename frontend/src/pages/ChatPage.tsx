@@ -8,6 +8,7 @@ import {
 	MessageSquare,
 	ArrowLeft,
 	Plus,
+	Trash2,
 } from "lucide-react";
 import {
 	api,
@@ -43,18 +44,21 @@ export function ChatPage() {
 	const [exchanges, setExchanges] = useState<Exchange[]>([]);
 	const [pendingQuestion, setPendingQuestion] = useState<string | null>(null);
 	const [activeChunk, setActiveChunk] = useState<number | null>(null);
+	const [confirmingDeleteDocId, setConfirmingDeleteDocId] = useState<
+		string | null
+	>(null);
 	const fileInputRef = useRef<HTMLInputElement>(null);
 	const bottomRef = useRef<HTMLDivElement>(null);
 
 	const leftPanel = useResizable({
 		storageKey: "stratum-left-panel-width",
-		defaultWidth: 244, // matches your current w-56
+		defaultWidth: 244,
 		minWidth: 180,
 		maxWidth: 400,
 	});
 	const rightPanel = useResizable({
 		storageKey: "stratum-right-panel-width",
-		defaultWidth: 320, // matches your current w-80
+		defaultWidth: 320,
 		minWidth: 260,
 		maxWidth: 520,
 	});
@@ -102,10 +106,6 @@ export function ChatPage() {
 				{ question: q, answer: res.answer, sources: res.sources },
 			]);
 
-			// If this was the first message in a new conversation, we now have
-			// a real conversationId - remember it so subsequent questions in
-			// this session append to the same conversation, and refresh the
-			// sidebar list so the new conversation appears there too.
 			if (!activeConversationId) {
 				setActiveConversationId(res.conversationId);
 				api.listConversations(workspaceId).then(setConversations);
@@ -121,9 +121,6 @@ export function ChatPage() {
 		setActiveChunk(null);
 		const convo = await api.getConversation(workspaceId, conversationId);
 
-		// Reconstruct question/answer pairs from the flat, role-based message
-		// list — pairing each "user" message with the "assistant" message
-		// that immediately follows it.
 		const rebuilt: Exchange[] = [];
 		for (let i = 0; i < convo.messages.length; i++) {
 			const msg = convo.messages[i];
@@ -137,6 +134,13 @@ export function ChatPage() {
 			}
 		}
 		setExchanges(rebuilt);
+	}
+
+	async function handleDeleteDocument(docId: string) {
+		if (!workspaceId) return;
+		await api.deleteDocument(workspaceId, docId);
+		setDocuments((prev) => prev.filter((d) => d.id !== docId));
+		setConfirmingDeleteDocId(null);
 	}
 
 	function startNewConversation() {
@@ -352,15 +356,51 @@ export function ChatPage() {
 								{documents.map((d) => (
 									<div
 										key={d.id}
-										className="flex items-center gap-2 px-1 py-1 rounded text-xs text-ink-300"
+										className="flex items-center gap-2 px-1 py-1 rounded text-xs text-ink-300 group"
 									>
 										<FileText
 											size={12}
 											className="text-ink-700 shrink-0"
 										/>
-										<span className="truncate">
+										<span className="truncate flex-1">
 											{d.filename}
 										</span>
+										{confirmingDeleteDocId === d.id ? (
+											<div className="flex items-center gap-1 shrink-0">
+												<button
+													onClick={() =>
+														handleDeleteDocument(
+															d.id,
+														)
+													}
+													className="text-[10px] text-danger-500 hover:underline"
+												>
+													Delete
+												</button>
+												<button
+													onClick={() =>
+														setConfirmingDeleteDocId(
+															null,
+														)
+													}
+													className="text-[10px] text-ink-500 hover:underline"
+												>
+													Cancel
+												</button>
+											</div>
+										) : (
+											<button
+												onClick={() =>
+													setConfirmingDeleteDocId(
+														d.id,
+													)
+												}
+												className="opacity-0 group-hover:opacity-100 text-ink-700 hover:text-danger-500 transition-all shrink-0"
+												aria-label="Delete document"
+											>
+												<Trash2 size={12} />
+											</button>
+										)}
 									</div>
 								))}
 							</div>

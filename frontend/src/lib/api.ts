@@ -60,15 +60,8 @@ export class ApiError extends Error {
 	}
 }
 
-// Axios instance with a fixed base URL — every request goes straight to
-// the backend's own origin, never through the dev server's own routes,
-// so there's no ambiguity with frontend page routes like /workspaces/:id
-// on a hard reload.
 const client = axios.create({ baseURL: API_URL });
 
-// Attach the auth token to every outgoing request automatically, instead
-// of repeating "if (authToken) headers.Authorization = ..." in every
-// individual API call.
 client.interceptors.request.use((config) => {
 	const token = localStorage.getItem("stratum_token");
 	if (token) {
@@ -77,8 +70,6 @@ client.interceptors.request.use((config) => {
 	return config;
 });
 
-// Normalize every failure into our own ApiError, so calling code never
-// has to know or care that axios is being used underneath.
 client.interceptors.response.use(
 	(res) => res,
 	(err: AxiosError<{ error?: string }>) => {
@@ -146,6 +137,11 @@ export const api = {
 			})
 			.then((r) => r.data);
 	},
+
+	deleteDocument: (workspaceId: string, documentId: string) =>
+		client
+			.delete(`/workspaces/${workspaceId}/documents/${documentId}`)
+			.then(() => undefined),
 
 	chat: (
 		workspaceId: string,
