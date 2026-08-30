@@ -1,3 +1,7 @@
+import axios, { AxiosError } from "axios";
+
+const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:4000";
+
 export interface Workspace {
 	id: string;
 	name: string;
@@ -27,15 +31,6 @@ export interface ChatResponse {
 	conversationId: string;
 }
 
-class ApiError extends Error {
-	status: number;
-
-	constructor(status: number, message: string) {
-		super(message);
-		this.status = status;
-	}
-}
-
 export interface Conversation {
 	id: string;
 	workspaceId: string;
@@ -56,10 +51,45 @@ export interface ConversationWithMessages extends Conversation {
 	messages: Message[];
 }
 
-let authToken: string | null = null;
+export class ApiError extends Error {
+	status: number;
+
+	constructor(status: number, message: string) {
+		super(message);
+		this.status = status;
+	}
+}
+
+// Axios instance with a fixed base URL — every request goes straight to
+// the backend's own origin, never through the dev server's own routes,
+// so there's no ambiguity with frontend page routes like /workspaces/:id
+// on a hard reload.
+const client = axios.create({ baseURL: API_URL });
+
+// Attach the auth token to every outgoing request automatically, instead
+// of repeating "if (authToken) headers.Authorization = ..." in every
+// individual API call.
+client.interceptors.request.use((config) => {
+	const token = localStorage.getItem("stratum_token");
+	if (token) {
+		config.headers.Authorization = `Bearer ${token}`;
+	}
+	return config;
+});
+
+// Normalize every failure into our own ApiError, so calling code never
+// has to know or care that axios is being used underneath.
+client.interceptors.response.use(
+	(res) => res,
+	(err: AxiosError<{ error?: string }>) => {
+		const status = err.response?.status ?? 0;
+		const message =
+			err.response?.data?.error ?? err.message ?? "Request failed";
+		return Promise.reject(new ApiError(status, message));
+	},
+);
 
 export function setAuthToken(token: string | null) {
-	authToken = token;
 	if (token) {
 		localStorage.setItem("stratum_token", token);
 	} else {
@@ -68,102 +98,53 @@ export function setAuthToken(token: string | null) {
 }
 
 export function loadStoredToken(): string | null {
-	const stored = localStorage.getItem("stratum_token");
-	authToken = stored;
-	return stored;
-}
-
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-	const headers: Record<string, string> = {
-		"Content-Type": "application/json",
-		...((options.headers as Record<string, string>) ?? {}),
-	};
-	if (authToken) {
-		headers.Authorization = `Bearer ${authToken}`;
-	}
-
-	const res = await fetch(path, { ...options, headers });
-
-	if (!res.ok) {
-		let message = `Request failed (${res.status})`;
-		try {
-			const body = await res.json();
-			if (body.error) message = body.error;
-		} catch {
-			// response wasn't JSON — keep the generic message
-		}
-		throw new ApiError(res.status, message);
-	}
-
-	return res.json();
+	return localStorage.getItem("stratum_token");
 }
 
 export const api = {
 	register: (email: string, password: string) =>
-		request<{ id: string; email: string }>("/auth/register", {
-			method: "POST",
-			body: JSON.stringify({ email, password }),
-		}),
+		client
+			.post<{
+				id: string;
+				email: string;
+			}>("/auth/register", { email, password })
+			.then((r) => r.data),
 
 	login: (email: string, password: string) =>
-		request<{ token: string }>("/auth/login", {
-			method: "POST",
-			body: JSON.stringify({ email, password }),
-		}),
+		client
+			.post<{ token: string }>("/auth/login", { email, password })
+			.then((r) => r.data),
 
-	listWorkspaces: () => request<Workspace[]>("/workspaces"),
-
-	updateWorkspace: (id: string, data: { name?: string; type?: string }) =>
-		request<Workspace>(`/workspaces/${id}`, {
-			method: "PATCH",
-			body: JSON.stringify(data),
-		}),
-
-	deleteWorkspace: async (id: string): Promise<void> => {
-		const headers: Record<string, string> = {};
-		if (authToken) headers.Authorization = `Bearer ${authToken}`;
-		const res = await fetch(`/workspaces/${id}`, {
-			method: "DELETE",
-			headers,
-		});
-		if (!res.ok) {
-			const body = await res.json().catch(() => ({}));
-			throw new ApiError(res.status, body.error ?? "Delete failed");
-		}
-	},
-
-	listDocuments: (workspaceId: string) =>
-		request<Document[]>(`/workspaces/${workspaceId}/documents`),
+	listWorkspaces: () =>
+		client.get<Workspace[]>("/workspaces").then((r) => r.data),
 
 	createWorkspace: (name: string, type: string) =>
-		request<Workspace>("/workspaces", {
-			method: "POST",
-			body: JSON.stringify({ name, type }),
-		}),
+		client
+			.post<Workspace>("/workspaces", { name, type })
+			.then((r) => r.data),
 
-	getWorkspace: (id: string) => request<Workspace>(`/workspaces/${id}`),
+	getWorkspace: (id: string) =>
+		client.get<Workspace>(`/workspaces/${id}`).then((r) => r.data),
 
-	uploadDocument: async (
-		workspaceId: string,
-		file: File,
-	): Promise<Document> => {
+	updateWorkspace: (id: string, data: { name?: string; type?: string }) =>
+		client.patch<Workspace>(`/workspaces/${id}`, data).then((r) => r.data),
+
+	deleteWorkspace: (id: string) =>
+		client.delete(`/workspaces/${id}`).then(() => undefined),
+
+	listDocuments: (workspaceId: string) =>
+		client
+			.get<Document[]>(`/workspaces/${workspaceId}/documents`)
+			.then((r) => r.data),
+
+	uploadDocument: (workspaceId: string, file: File) => {
 		const formData = new FormData();
 		formData.append("file", file);
-
-		const headers: Record<string, string> = {};
-		if (authToken) headers.Authorization = `Bearer ${authToken}`;
-
-		const res = await fetch(`/workspaces/${workspaceId}/documents`, {
-			method: "POST",
-			headers,
-			body: formData,
-		});
-
-		if (!res.ok) {
-			const body = await res.json().catch(() => ({}));
-			throw new ApiError(res.status, body.error ?? "Upload failed");
-		}
-		return res.json();
+		return client
+			.post<Document>(`/workspaces/${workspaceId}/documents`, formData, {
+				headers: { "Content-Type": "multipart/form-data" },
+			})
+			.then((r) => r.data);
 	},
 
 	chat: (
@@ -172,22 +153,23 @@ export const api = {
 		chunkingStrategy: "fixed" | "structure_aware",
 		conversationId?: string,
 	) =>
-		request<ChatResponse>(`/workspaces/${workspaceId}/chat`, {
-			method: "POST",
-			body: JSON.stringify({
+		client
+			.post<ChatResponse>(`/workspaces/${workspaceId}/chat`, {
 				question,
 				chunkingStrategy,
 				conversationId,
-			}),
-		}),
+			})
+			.then((r) => r.data),
 
 	listConversations: (workspaceId: string) =>
-		request<Conversation[]>(`/workspaces/${workspaceId}/conversations`),
+		client
+			.get<Conversation[]>(`/workspaces/${workspaceId}/conversations`)
+			.then((r) => r.data),
 
 	getConversation: (workspaceId: string, conversationId: string) =>
-		request<ConversationWithMessages>(
-			`/workspaces/${workspaceId}/conversations/${conversationId}`,
-		),
+		client
+			.get<ConversationWithMessages>(
+				`/workspaces/${workspaceId}/conversations/${conversationId}`,
+			)
+			.then((r) => r.data),
 };
-
-export { ApiError };
