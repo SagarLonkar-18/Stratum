@@ -6,6 +6,7 @@ import queryRouter from "./routes/query.routes";
 import hybridQueryRouter from "./routes/hybridQuery.routes";
 import rerankedQueryRouter from "./routes/rerankedQuery.routes";
 import chatRouter from "./routes/chat.routes";
+import conversationRouter from "./routes/conversation.routes";
 
 const app = express();
 app.use(express.json());
@@ -17,6 +18,7 @@ app.use("/workspaces/:workspaceId/query", queryRouter);
 app.use("/workspaces/:workspaceId/hybrid-query", hybridQueryRouter);
 app.use("/workspaces/:workspaceId/reranked-query", rerankedQueryRouter);
 app.use("/workspaces/:workspaceId/chat", chatRouter);
+app.use("/workspaces/:workspaceId/conversations", conversationRouter);
 
 app.get("/health", (_req, res) => {
 	res.json({ status: "ok" });

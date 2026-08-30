@@ -37,7 +37,7 @@ Answer:`;
 
 export async function chatWithWorkspace(req: Request, res: Response) {
 	const { workspaceId } = req.params;
-	const { question, chunkingStrategy } = req.body;
+	const { question, chunkingStrategy, conversationId } = req.body;
 
 	if (!workspaceId || Array.isArray(workspaceId)) {
 		return res.status(400).json({ error: "workspaceId is required" });
@@ -74,15 +74,59 @@ export async function chatWithWorkspace(req: Request, res: Response) {
 		const prompt = buildPrompt(question, topChunks);
 		const answer = await generateCompletion(prompt);
 
+		const sources = topChunks.map((c, i) => ({
+			chunkNumber: i + 1,
+			id: c.id,
+			chunkIndex: c.chunkIndex,
+			content: c.content,
+		}));
+
+		// Persist this exchange: reuse the given conversation, or start a
+		// new one if this is the first message in a session. The question
+		// and answer are stored as two separate Message rows, matching how
+		// LLM chat APIs represent conversation turns — this shape is what
+		// lets a future version pass prior turns back to the model for
+		// real follow-up-question support.
+		const savedConversationId = await withWorkspace(
+			workspaceId,
+			async (tx) => {
+				const convo = conversationId
+					? await tx.conversation.findUnique({
+							where: { id: conversationId },
+						})
+					: await tx.conversation.create({
+							data: { workspaceId, title: question.slice(0, 80) },
+						});
+
+				if (!convo) {
+					throw new Error("conversation not found");
+				}
+
+				await tx.message.create({
+					data: {
+						conversationId: convo.id,
+						role: "user",
+						content: question,
+					},
+				});
+				await tx.message.create({
+					data: {
+						conversationId: convo.id,
+						role: "assistant",
+						content: answer,
+						sources,
+					},
+				});
+
+				return convo.id;
+			},
+		);
+
 		return res.status(200).json({
 			question,
 			answer,
-			sources: topChunks.map((c, i) => ({
-				chunkNumber: i + 1,
-				id: c.id,
-				chunkIndex: c.chunkIndex,
-				content: c.content,
-			})),
+			sources,
+			conversationId: savedConversationId,
 		});
 	} catch (err) {
 		console.error(err);
