@@ -24,6 +24,7 @@ export interface ChatResponse {
 	question: string;
 	answer: string;
 	sources: ChatSource[];
+	conversationId: string;
 }
 
 class ApiError extends Error {
@@ -33,6 +34,26 @@ class ApiError extends Error {
 		super(message);
 		this.status = status;
 	}
+}
+
+export interface Conversation {
+	id: string;
+	workspaceId: string;
+	title: string | null;
+	createdAt: string;
+}
+
+export interface Message {
+	id: string;
+	conversationId: string;
+	role: "user" | "assistant";
+	content: string;
+	sources: ChatSource[] | null;
+	createdAt: string;
+}
+
+export interface ConversationWithMessages extends Conversation {
+	messages: Message[];
 }
 
 let authToken: string | null = null;
@@ -149,11 +170,24 @@ export const api = {
 		workspaceId: string,
 		question: string,
 		chunkingStrategy: "fixed" | "structure_aware",
+		conversationId?: string,
 	) =>
 		request<ChatResponse>(`/workspaces/${workspaceId}/chat`, {
 			method: "POST",
-			body: JSON.stringify({ question, chunkingStrategy }),
+			body: JSON.stringify({
+				question,
+				chunkingStrategy,
+				conversationId,
+			}),
 		}),
+
+	listConversations: (workspaceId: string) =>
+		request<Conversation[]>(`/workspaces/${workspaceId}/conversations`),
+
+	getConversation: (workspaceId: string, conversationId: string) =>
+		request<ConversationWithMessages>(
+			`/workspaces/${workspaceId}/conversations/${conversationId}`,
+		),
 };
 
 export { ApiError };

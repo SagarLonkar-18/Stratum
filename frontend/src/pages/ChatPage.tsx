@@ -7,15 +7,18 @@ import {
 	Loader2,
 	MessageSquare,
 	ArrowLeft,
+	Plus,
 } from "lucide-react";
 import {
 	api,
 	type Workspace,
 	type Document,
 	type ChatSource,
+	type Conversation,
 } from "../lib/api";
 import { AnswerText } from "../components/AnswerText";
 import { SourcePanel } from "../components/SourcePanel";
+import { useResizable } from "../lib/useResizable";
 
 interface Exchange {
 	question: string;
@@ -30,23 +33,37 @@ export function ChatPage() {
 	const navigate = useNavigate();
 	const [workspace, setWorkspace] = useState<Workspace | null>(null);
 	const [documents, setDocuments] = useState<Document[]>([]);
+	const [conversations, setConversations] = useState<Conversation[]>([]);
+	const [activeConversationId, setActiveConversationId] = useState<
+		string | null
+	>(null);
 	const [isUploading, setIsUploading] = useState(false);
 	const [strategy, setStrategy] = useState<Strategy>("fixed");
 	const [question, setQuestion] = useState("");
 	const [exchanges, setExchanges] = useState<Exchange[]>([]);
-	// The question the user just submitted, shown immediately while the
-	// answer is still in flight — without this, the question only appears
-	// once the full response arrives, which reads as if input was silently
-	// dropped.
 	const [pendingQuestion, setPendingQuestion] = useState<string | null>(null);
 	const [activeChunk, setActiveChunk] = useState<number | null>(null);
 	const fileInputRef = useRef<HTMLInputElement>(null);
 	const bottomRef = useRef<HTMLDivElement>(null);
 
+	const leftPanel = useResizable({
+		storageKey: "stratum-left-panel-width",
+		defaultWidth: 244, // matches your current w-56
+		minWidth: 180,
+		maxWidth: 400,
+	});
+	const rightPanel = useResizable({
+		storageKey: "stratum-right-panel-width",
+		defaultWidth: 320, // matches your current w-80
+		minWidth: 260,
+		maxWidth: 520,
+	});
+
 	useEffect(() => {
 		if (!workspaceId) return;
 		api.getWorkspace(workspaceId).then(setWorkspace);
 		api.listDocuments(workspaceId).then(setDocuments);
+		api.listConversations(workspaceId).then(setConversations);
 	}, [workspaceId]);
 
 	useEffect(() => {
@@ -74,14 +91,58 @@ export function ChatPage() {
 		setPendingQuestion(q);
 		setActiveChunk(null);
 		try {
-			const res = await api.chat(workspaceId, q, strategy);
+			const res = await api.chat(
+				workspaceId,
+				q,
+				strategy,
+				activeConversationId ?? undefined,
+			);
 			setExchanges((prev) => [
 				...prev,
 				{ question: q, answer: res.answer, sources: res.sources },
 			]);
+
+			// If this was the first message in a new conversation, we now have
+			// a real conversationId - remember it so subsequent questions in
+			// this session append to the same conversation, and refresh the
+			// sidebar list so the new conversation appears there too.
+			if (!activeConversationId) {
+				setActiveConversationId(res.conversationId);
+				api.listConversations(workspaceId).then(setConversations);
+			}
 		} finally {
 			setPendingQuestion(null);
 		}
+	}
+
+	async function openConversation(conversationId: string) {
+		if (!workspaceId) return;
+		setActiveConversationId(conversationId);
+		setActiveChunk(null);
+		const convo = await api.getConversation(workspaceId, conversationId);
+
+		// Reconstruct question/answer pairs from the flat, role-based message
+		// list — pairing each "user" message with the "assistant" message
+		// that immediately follows it.
+		const rebuilt: Exchange[] = [];
+		for (let i = 0; i < convo.messages.length; i++) {
+			const msg = convo.messages[i];
+			if (msg.role === "user") {
+				const next = convo.messages[i + 1];
+				rebuilt.push({
+					question: msg.content,
+					answer: next?.role === "assistant" ? next.content : "",
+					sources: (next?.sources as ChatSource[]) ?? [],
+				});
+			}
+		}
+		setExchanges(rebuilt);
+	}
+
+	function startNewConversation() {
+		setActiveConversationId(null);
+		setExchanges([]);
+		setActiveChunk(null);
 	}
 
 	const lastSources =
@@ -104,12 +165,10 @@ export function ChatPage() {
 			</header>
 
 			<div className="flex flex-1 overflow-hidden">
-				{/* Left: workspace context (name/type) + conversation history.
-            Conversation history is a placeholder — chat is not yet
-            persisted server-side, so there is genuinely nothing to list
-            here beyond the current session; the empty state says so
-            rather than implying a feature that doesn't exist yet. */}
-				<aside className="w-56 shrink-0 border-r border-base-700 bg-base-850 flex-col overflow-hidden hidden lg:flex">
+				<aside
+					style={{ width: leftPanel.width }}
+					className="shrink-0 border-r border-base-700 bg-base-850 flex-col overflow-hidden hidden lg:flex relative"
+				>
 					<div className="px-4 py-3 border-b border-base-700">
 						<p className="text-sm text-ink-100 leading-none">
 							{workspace?.name ?? "…"}
@@ -118,24 +177,54 @@ export function ChatPage() {
 							{workspace?.type}
 						</p>
 					</div>
-					<div className="px-4 py-3 border-b border-base-700">
+					<div className="px-4 py-3 border-b border-base-700 flex items-center justify-between">
 						<p className="text-xs uppercase tracking-wide text-ink-500">
 							Conversations
 						</p>
+						<button
+							onClick={startNewConversation}
+							className="text-ink-500 hover:text-verified-400 transition-colors"
+							aria-label="New conversation"
+						>
+							<Plus size={14} />
+						</button>
 					</div>
-					<div className="flex-1 flex items-center justify-center px-5 text-center">
-						<p className="text-xs text-ink-700 leading-relaxed">
-							<MessageSquare
-								size={16}
-								className="mx-auto mb-2 text-ink-700"
-							/>
-							Conversation history isn't persisted yet — this
-							session's messages are below.
-						</p>
-					</div>
+
+					{conversations.length === 0 ? (
+						<div className="flex-1 flex items-center justify-center px-5 text-center">
+							<p className="text-xs text-ink-700 leading-relaxed">
+								<MessageSquare
+									size={16}
+									className="mx-auto mb-2 text-ink-700"
+								/>
+								Ask a question to start your first conversation.
+							</p>
+						</div>
+					) : (
+						<div className="flex-1 overflow-y-auto py-2">
+							{conversations.map((c) => (
+								<button
+									key={c.id}
+									onClick={() => openConversation(c.id)}
+									className={`w-full text-left px-4 py-2 text-xs truncate transition-colors ${
+										c.id === activeConversationId
+											? "bg-base-700 text-ink-100"
+											: "text-ink-500 hover:bg-base-800 hover:text-ink-300"
+									}`}
+								>
+									{c.title || "Untitled conversation"}
+								</button>
+							))}
+						</div>
+					)}
+					<div
+						onMouseDown={() => leftPanel.startDragging(1)}
+						className={`absolute top-0 right-0 h-full w-1 cursor-col-resize hover:bg-verified-500/40 transition-colors ${
+							leftPanel.isDragging ? "bg-verified-500/40" : ""
+						}`}
+					/>
 				</aside>
 
-				{/* Center: chat thread */}
 				<main className="flex-1 flex flex-col overflow-hidden">
 					<div className="flex-1 overflow-y-auto px-6 py-6 flex flex-col gap-6">
 						{exchanges.length === 0 && !pendingQuestion && (
@@ -220,8 +309,16 @@ export function ChatPage() {
 					</form>
 				</main>
 
-				{/* Right: documents + strategy, stacked above retrieved sources */}
-				<aside className="w-80 shrink-0 border-l border-base-700 bg-base-850 flex-col overflow-hidden hidden md:flex">
+				<aside
+					style={{ width: rightPanel.width }}
+					className="shrink-0 border-l border-base-700 bg-base-850 flex-col overflow-hidden hidden md:flex relative"
+				>
+					<div
+						onMouseDown={() => rightPanel.startDragging(-1)}
+						className={`absolute top-0 left-0 h-full w-1 cursor-col-resize hover:bg-verified-500/40 transition-colors ${
+							rightPanel.isDragging ? "bg-verified-500/40" : ""
+						}`}
+					/>
 					<div className="p-4 border-b border-base-700">
 						<input
 							ref={fileInputRef}
