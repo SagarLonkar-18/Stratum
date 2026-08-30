@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import fs from "fs/promises";
 import path from "path";
 import { PDFParse } from "pdf-parse";
+import { parse } from "csv-parse/sync";
 import { withWorkspace } from "../db/withWorkspace";
 import { chunkTextFixedSize } from "../lib/chunking/fixedSizeChunker";
 import { chunkTextStructureAware } from "../lib/chunking/structureAwareChunker";
@@ -19,13 +20,16 @@ export async function uploadDocument(req: Request, res: Response) {
 	}
 
 	try {
+		const fileExtension = path.extname(req.file.originalname).toLowerCase();
+		const isCsv = fileExtension === ".csv";
+
 		const document = await withWorkspace(workspaceId, (tx) =>
 			tx.document.create({
 				data: {
 					workspaceId,
 					filename: req.file!.originalname,
 					filePath: "", // placeholder, filled in below
-					fileType: "pdf",
+					fileType: isCsv ? "csv" : "pdf",
 					status: "processing",
 				},
 			}),
@@ -42,22 +46,50 @@ export async function uploadDocument(req: Request, res: Response) {
 
 		const relativePath = path.relative(process.cwd(), finalPath);
 
-		const fileBuffer = await fs.readFile(finalPath);
-		const parser = new PDFParse({ data: fileBuffer });
-		const result = await parser.getText();
-		await parser.destroy();
+		let extractedText: string;
+		let pageCount = 1;
 
-		console.log("\n--- Extracted PDF text (first 500 chars) ---");
-		console.log(result.text.slice(0, 500));
+		if (isCsv) {
+			const csvBuffer = await fs.readFile(finalPath);
+			const records: string[][] = parse(csvBuffer, {
+				skip_empty_lines: true,
+			});
+
+			if (records.length === 0) {
+				throw new Error("CSV file is empty");
+			}
+
+			const [header, ...rows] = records;
+			extractedText = rows
+				.map((row) =>
+					header
+						.map((col, i) => `${col}: ${row[i] ?? ""}`)
+						.join(", "),
+				)
+				.join("\n\n");
+		} else {
+			const fileBuffer = await fs.readFile(finalPath);
+			const parser = new PDFParse({ data: fileBuffer });
+			const result = await parser.getText();
+			await parser.destroy();
+			extractedText = result.text;
+			pageCount = result.total;
+		}
+
+		console.log("\n--- Extracted text (first 500 chars) ---");
+		console.log(extractedText.slice(0, 500));
 		console.log("--- End preview ---");
-		console.log(`Total extracted characters: ${result.text.length}`);
-		console.log(`Reported page count: ${result.total}\n`);
+		console.log(`Total extracted characters: ${extractedText.length}`);
+		console.log(`Reported page/section count: ${pageCount}\n`);
 
 		const strategies = [
-			{ name: "fixed" as const, chunks: chunkTextFixedSize(result.text) },
+			{
+				name: "fixed" as const,
+				chunks: chunkTextFixedSize(extractedText),
+			},
 			{
 				name: "structure_aware" as const,
-				chunks: chunkTextStructureAware(result.text),
+				chunks: chunkTextStructureAware(extractedText),
 			},
 		];
 
@@ -164,7 +196,7 @@ export async function deleteDocument(req: Request, res: Response) {
 		if (!document) {
 			return res.status(404).json({ error: "document not found" });
 		}
-		
+
 		await withWorkspace(workspaceId, (tx) =>
 			tx.document.delete({ where: { id: documentId } }),
 		);

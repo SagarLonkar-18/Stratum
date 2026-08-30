@@ -12,7 +12,7 @@ const storage = multer.diskStorage({
 	},
 });
 
-const ALLOWED_MIME_TYPES = ["application/pdf"];
+const ALLOWED_MIME_TYPES = ["application/pdf", "text/csv", "application/vnd.ms-excel"];
 
 export const upload = multer({
 	storage,
