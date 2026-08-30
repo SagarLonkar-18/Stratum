@@ -27,6 +27,7 @@ model Workspace {
   documents Document[]
   chunks    Chunk[]
   questions EvalQuestion[]
+  conversations Conversation[]
 
   @@index([ownerId])
 }
@@ -63,6 +64,30 @@ model Chunk {
 
   @@index([workspaceId])
   @@index([documentId])
+}
+
+model Conversation {
+  id          String    @id @default(uuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  title       String?
+  createdAt   DateTime  @default(now())
+
+  messages Message[]
+
+  @@index([workspaceId])
+}
+
+model Message {
+  id             String       @id @default(uuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           String // "user" | "assistant"
+  content        String
+  sources        Json?
+  createdAt      DateTime     @default(now())
+
+  @@index([conversationId])
 }
 
 model EvalQuestion {
