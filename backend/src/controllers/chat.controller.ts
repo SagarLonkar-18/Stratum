@@ -11,6 +11,7 @@ const FINAL_TOP_K = 5;
 function buildPrompt(
 	question: string,
 	chunks: { id: string; content: string }[],
+	history: { role: string; content: string }[] = [],
 ): string {
 	const context = chunks
 		.map(
@@ -19,9 +20,18 @@ function buildPrompt(
 		)
 		.join("\n\n");
 
+	const historyBlock = history.length
+		? `Prior conversation (for context only - do not cite this, only cite the numbered chunks above):\n${history
+				.map(
+					(m) =>
+						`${m.role === "user" ? "User" : "Assistant"}: ${m.content}`,
+				)
+				.join("\n")}\n\n`
+		: "";
+
 	return `You are answering questions using ONLY the numbered chunks below.
 
-${context}
+${historyBlock} ${context}
 
 Question: ${question}
 
@@ -71,7 +81,19 @@ export async function chatWithWorkspace(req: Request, res: Response) {
 		const contentById = new Map(candidates.map((c) => [c.id, c]));
 		const topChunks = reranked.map((r) => contentById.get(r.id)!);
 
-		const prompt = buildPrompt(question, topChunks);
+		let history: { role: string; content: string }[] = [];
+		if (conversationId) {
+			history = await withWorkspace(workspaceId, (tx) =>
+				tx.message.findMany({
+					where: { conversationId },
+					orderBy: { createdAt: "asc" },
+					take: 10, // last 10 messages - enough context without an unbounded prompt
+					select: { role: true, content: true },
+				}),
+			);
+		}
+
+		const prompt = buildPrompt(question, topChunks, history);
 		const answer = await generateCompletion(prompt);
 
 		const sources = topChunks.map((c, i) => ({
@@ -80,13 +102,7 @@ export async function chatWithWorkspace(req: Request, res: Response) {
 			chunkIndex: c.chunkIndex,
 			content: c.content,
 		}));
-
-		// Persist this exchange: reuse the given conversation, or start a
-		// new one if this is the first message in a session. The question
-		// and answer are stored as two separate Message rows, matching how
-		// LLM chat APIs represent conversation turns — this shape is what
-		// lets a future version pass prior turns back to the model for
-		// real follow-up-question support.
+		
 		const savedConversationId = await withWorkspace(
 			workspaceId,
 			async (tx) => {
