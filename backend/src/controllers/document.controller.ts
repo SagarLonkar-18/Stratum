@@ -145,3 +145,36 @@ export async function listDocuments(req: Request, res: Response) {
 		return res.status(500).json({ error: "internal server error" });
 	}
 }
+
+export async function deleteDocument(req: Request, res: Response) {
+	const { workspaceId, documentId } = req.params;
+
+	if (!workspaceId || Array.isArray(workspaceId)) {
+		return res.status(400).json({ error: "workspaceId is required" });
+	}
+	if (!documentId || Array.isArray(documentId)) {
+		return res.status(400).json({ error: "documentId is required" });
+	}
+
+	try {
+		const document = await withWorkspace(workspaceId, (tx) =>
+			tx.document.findUnique({ where: { id: documentId } }),
+		);
+
+		if (!document) {
+			return res.status(404).json({ error: "document not found" });
+		}
+		
+		await withWorkspace(workspaceId, (tx) =>
+			tx.document.delete({ where: { id: documentId } }),
+		);
+
+		const filePath = path.join(process.cwd(), document.filePath);
+		await fs.rm(filePath, { force: true });
+
+		return res.status(204).send();
+	} catch (err) {
+		console.error(err);
+		return res.status(500).json({ error: "internal server error" });
+	}
+}
