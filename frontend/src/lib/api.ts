@@ -168,4 +168,23 @@ export const api = {
 				`/workspaces/${workspaceId}/conversations/${conversationId}`,
 			)
 			.then((r) => r.data),
+
+	updateConversation: (
+		workspaceId: string,
+		conversationId: string,
+		title: string,
+	) =>
+		client
+			.patch<Conversation>(
+				`/workspaces/${workspaceId}/conversations/${conversationId}`,
+				{ title },
+			)
+			.then((r) => r.data),
+
+	deleteConversation: (workspaceId: string, conversationId: string) =>
+		client
+			.delete(
+				`/workspaces/${workspaceId}/conversations/${conversationId}`,
+			)
+			.then(() => undefined),
 };
