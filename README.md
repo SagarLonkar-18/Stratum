@@ -186,6 +186,8 @@ stratum/
 | `POST` | `/workspaces/:workspaceId/chat` | JWT + ownership | full pipeline - retrieval, reranking, and a cited, conversation-aware generated answer; creates or continues a `Conversation` |
 | `GET` | `/workspaces/:workspaceId/conversations` | JWT + ownership | list a workspace's conversations |
 | `GET` | `/workspaces/:workspaceId/conversations/:conversationId` | JWT + ownership | fetch one conversation's full message history |
+| `PATCH` | `/workspaces/:workspaceId/conversations/:conversationId` | JWT + ownership | rename a conversation |
+| `DELETE` | `/workspaces/:workspaceId/conversations/:conversationId` | JWT + ownership | delete a conversation and its associated messages |
 
 ---
 
