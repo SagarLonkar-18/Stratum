@@ -9,6 +9,10 @@ import {
 	ArrowLeft,
 	Plus,
 	Trash2,
+	MoreVertical,
+	Pencil,
+	Check,
+	X,
 } from "lucide-react";
 import {
 	api,
@@ -47,6 +51,15 @@ export function ChatPage() {
 	const [confirmingDeleteDocId, setConfirmingDeleteDocId] = useState<
 		string | null
 	>(null);
+	const [openMenuConversationId, setOpenMenuConversationId] = useState<
+		string | null
+	>(null);
+	const [editingConversationId, setEditingConversationId] = useState<
+		string | null
+	>(null);
+	const [editConversationTitle, setEditConversationTitle] = useState("");
+	const [confirmingDeleteConversationId, setConfirmingDeleteConversationId] =
+		useState<string | null>(null);
 	const fileInputRef = useRef<HTMLInputElement>(null);
 	const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -149,6 +162,35 @@ export function ChatPage() {
 		setActiveChunk(null);
 	}
 
+	function startEditingConversation(c: Conversation) {
+		setEditingConversationId(c.id);
+		setEditConversationTitle(c.title ?? "");
+		setOpenMenuConversationId(null);
+	}
+
+	async function saveConversationRename(id: string) {
+		if (!workspaceId || !editConversationTitle.trim()) return;
+		const updated = await api.updateConversation(
+			workspaceId,
+			id,
+			editConversationTitle.trim(),
+		);
+		setConversations((prev) =>
+			prev.map((c) => (c.id === id ? updated : c)),
+		);
+		setEditingConversationId(null);
+	}
+
+	async function handleDeleteConversation(id: string) {
+		if (!workspaceId) return;
+		await api.deleteConversation(workspaceId, id);
+		setConversations((prev) => prev.filter((c) => c.id !== id));
+		if (activeConversationId === id) {
+			startNewConversation();
+		}
+		setConfirmingDeleteConversationId(null);
+	}
+
 	const lastSources =
 		exchanges.length > 0 ? exchanges[exchanges.length - 1].sources : null;
 
@@ -206,19 +248,151 @@ export function ChatPage() {
 						</div>
 					) : (
 						<div className="flex-1 overflow-y-auto py-2">
-							{conversations.map((c) => (
-								<button
-									key={c.id}
-									onClick={() => openConversation(c.id)}
-									className={`w-full text-left px-4 py-2 text-xs truncate transition-colors ${
-										c.id === activeConversationId
-											? "bg-base-700 text-ink-100"
-											: "text-ink-500 hover:bg-base-800 hover:text-ink-300"
-									}`}
-								>
-									{c.title || "Untitled conversation"}
-								</button>
-							))}
+							{conversations.map((c) => {
+								const isEditing =
+									editingConversationId === c.id;
+								const isMenuOpen =
+									openMenuConversationId === c.id;
+								const isConfirmingDelete =
+									confirmingDeleteConversationId === c.id;
+
+								if (isEditing) {
+									return (
+										<div
+											key={c.id}
+											className="px-3 py-1.5 flex items-center gap-1"
+										>
+											<input
+												autoFocus
+												value={editConversationTitle}
+												onChange={(e) =>
+													setEditConversationTitle(
+														e.target.value,
+													)
+												}
+												onKeyDown={(e) => {
+													if (e.key === "Enter")
+														saveConversationRename(
+															c.id,
+														);
+													if (e.key === "Escape")
+														setEditingConversationId(
+															null,
+														);
+												}}
+												className="flex-1 bg-base-900 border border-base-600 rounded px-2 py-1 text-xs text-ink-100 outline-none focus:border-verified-500"
+											/>
+											<button
+												onClick={() =>
+													saveConversationRename(c.id)
+												}
+												className="text-verified-500 hover:text-verified-400"
+											>
+												<Check size={13} />
+											</button>
+											<button
+												onClick={() =>
+													setEditingConversationId(
+														null,
+													)
+												}
+												className="text-ink-500 hover:text-ink-300"
+											>
+												<X size={13} />
+											</button>
+										</div>
+									);
+								}
+
+								if (isConfirmingDelete) {
+									return (
+										<div
+											key={c.id}
+											className="px-4 py-2 flex items-center gap-2"
+										>
+											<span className="text-[11px] text-danger-500 flex-1">
+												Delete?
+											</span>
+											<button
+												onClick={() =>
+													handleDeleteConversation(
+														c.id,
+													)
+												}
+												className="text-[10px] text-danger-500 hover:underline"
+											>
+												Delete
+											</button>
+											<button
+												onClick={() =>
+													setConfirmingDeleteConversationId(
+														null,
+													)
+												}
+												className="text-[10px] text-ink-500 hover:underline"
+											>
+												Cancel
+											</button>
+										</div>
+									);
+								}
+
+								return (
+									<div key={c.id} className="relative group">
+										<button
+											onClick={() =>
+												openConversation(c.id)
+											}
+											className={`w-full text-left pl-4 pr-8 py-2 text-xs truncate transition-colors ${
+												c.id === activeConversationId
+													? "bg-base-700 text-ink-100"
+													: "text-ink-500 hover:bg-base-800 hover:text-ink-300"
+											}`}
+										>
+											{c.title || "Untitled conversation"}
+										</button>
+										<button
+											onClick={(e) => {
+												e.stopPropagation();
+												setOpenMenuConversationId(
+													isMenuOpen ? null : c.id,
+												);
+											}}
+											className="absolute right-1.5 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 text-ink-600 hover:text-ink-300 transition-opacity"
+										>
+											<MoreVertical size={13} />
+										</button>
+
+										{isMenuOpen && (
+											<div className="absolute right-1 top-8 z-10 bg-base-800 border border-base-600 rounded-md overflow-hidden shadow-lg w-32">
+												<button
+													onClick={() =>
+														startEditingConversation(
+															c,
+														)
+													}
+													className="w-full flex items-center gap-2 px-3 py-2 text-xs text-ink-300 hover:bg-base-700 hover:text-ink-100 transition-colors"
+												>
+													<Pencil size={12} /> Rename
+												</button>
+												<button
+													onClick={() => {
+														setConfirmingDeleteConversationId(
+															c.id,
+														);
+														setOpenMenuConversationId(
+															null,
+														);
+													}}
+													className="w-full flex items-center gap-2 px-3 py-2 text-xs text-danger-500 hover:bg-base-700 transition-colors"
+												>
+													<Trash2 size={12} /> Delete
+												</button>
+											</div>
+										)}
+									</div>
+								);
+							})}
 						</div>
 					)}
 					<div
