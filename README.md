@@ -2,11 +2,7 @@
 
 A locally-run, multi-tenant RAG knowledge base with hybrid search and reranking - built for organizations that can't send their documents to a cloud LLM API.
 
----
-
-## Status
-
-The full stack is complete and manually verified end-to-end: a React frontend (auth, workspace management, document upload, citation-traced chat with persisted conversation history) talking to a Node/Express API that handles ingestion (PDF + CSV) → dual-strategy chunking → embedding → hybrid search → reranking → cited, conversation-aware generation. See [Evaluation](#evaluation) for measured retrieval comparisons.
+New here? See [QUICKSTART.md](./QUICKSTART.md) for the fastest path to a running instance.
 
 ---
 
@@ -206,13 +202,21 @@ ollama pull qwen2.5:7b-instruct-q4_K_M
 ollama pull nomic-embed-text
 ```
 
-### 3. Start the containers
+### 3. Start Ollama
+
+```bash
+ollama serve
+```
+
+Leave this running in its own terminal tab - it needs to stay up for the backend to reach it. Ollama doesn't persist as a background service by default, so this needs to be run at the start of every session.
+
+### 4. Start the containers
 
 ```bash
 docker compose up -d
 ```
 
-### 4. Create a non-superuser database role
+### 5. Create a non-superuser database role
 
 The default `POSTGRES_USER` in the official Postgres image is a superuser, and superusers bypass Row-Level Security unconditionally - `FORCE ROW LEVEL SECURITY` does not close this gap. The application must connect as a separate, restricted role for RLS to actually apply:
 
@@ -230,7 +234,7 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO app_user;
 
 (`CREATEDB` is required for Prisma's shadow database during migrations - it does not grant RLS bypass, which is tied specifically to the `SUPERUSER` attribute.)
 
-### 5. Backend environment variables
+### 6. Backend environment variables
 
 Copy `backend/.env.example` to `backend/.env`. Use the `app_user` connection string for running the app day-to-day; switch to the `rag` superuser connection string only when running a schema migration, then switch back:
 
@@ -242,7 +246,7 @@ DATABASE_URL="postgresql://app_user:app_user_dev_password@localhost:5432/rag_db"
 DATABASE_URL="postgresql://rag:rag_dev_password@localhost:5432/rag_db"
 ```
 
-### 6. Install, migrate, verify isolation
+### 7. Install, migrate, verify isolation
 
 ```bash
 cd backend
@@ -252,7 +256,7 @@ npx prisma migrate dev
 npm run test:isolation   # should print two PASS lines
 ```
 
-### 7. Run the backend
+### 8. Run the backend
 
 ```bash
 npm run dev
@@ -260,7 +264,7 @@ npm run dev
 
 Server listens on `:4000`. `curl http://localhost:4000/health` should return `{"status":"ok"}`.
 
-### 8. Frontend
+### 9. Frontend
 
 ```bash
 cd frontend
