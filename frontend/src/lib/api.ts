@@ -188,3 +188,68 @@ export const api = {
 			)
 			.then(() => undefined),
 };
+
+export async function chatStream(
+	workspaceId: string,
+	question: string,
+	chunkingStrategy: "fixed" | "structure_aware",
+	conversationId: string | undefined,
+	onToken: (text: string) => void,
+): Promise<{ sources: ChatSource[]; conversationId: string }> {
+	const token = localStorage.getItem("stratum_token");
+
+	const res = await fetch(
+		`${API_URL}/workspaces/${workspaceId}/chat/stream`,
+		{
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				...(token ? { Authorization: `Bearer ${token}` } : {}),
+			},
+			body: JSON.stringify({
+				question,
+				chunkingStrategy,
+				conversationId,
+			}),
+		},
+	);
+
+	if (!res.ok || !res.body) {
+		throw new ApiError(res.status, "Streaming request failed");
+	}
+
+	const reader = res.body.getReader();
+	const decoder = new TextDecoder();
+	let buffer = "";
+	let result: { sources: ChatSource[]; conversationId: string } | null = null;
+
+	while (true) {
+		const { done, value } = await reader.read();
+		if (done) break;
+
+		buffer += decoder.decode(value, { stream: true });
+		const lines = buffer.split("\n\n");
+		buffer = lines.pop() ?? "";
+
+		for (const line of lines) {
+			if (!line.startsWith("data: ")) continue;
+			const parsed = JSON.parse(line.slice(6));
+
+			if (parsed.type === "token") {
+				onToken(parsed.text);
+			} else if (parsed.type === "done") {
+				result = {
+					sources: parsed.sources,
+					conversationId: parsed.conversationId,
+				};
+			} else if (parsed.type === "error") {
+				throw new ApiError(500, parsed.message);
+			}
+		}
+	}
+
+	if (!result) {
+		throw new ApiError(500, "Stream ended without a completion event");
+	}
+	return result;
+}
