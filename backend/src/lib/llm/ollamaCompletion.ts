@@ -22,3 +22,46 @@ export async function generateCompletion(prompt: string): Promise<string> {
 	const data = (await res.json()) as { response: string };
 	return data.response;
 }
+
+export async function* generateCompletionStream(
+	prompt: string,
+): AsyncGenerator<string> {
+	const res = await fetch(`${OLLAMA_BASE_URL}/api/generate`, {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify({
+			model: LLM_MODEL,
+			prompt,
+			stream: true,
+			options: { temperature: 0.2 },
+		}),
+	});
+
+	if (!res.ok || !res.body) {
+		throw new Error(
+			`Ollama generate request failed: ${res.status} ${await res.text()}`,
+		);
+	}
+
+	const reader = res.body.getReader();
+	const decoder = new TextDecoder();
+	let buffer = "";
+
+	while (true) {
+		const { done, value } = await reader.read();
+		if (done) break;
+
+		buffer += decoder.decode(value, { stream: true });
+		const lines = buffer.split("\n");
+		buffer = lines.pop() ?? ""; // keep the last, possibly incomplete line
+
+		for (const line of lines) {
+			if (!line.trim()) continue;
+			const parsed = JSON.parse(line) as {
+				response: string;
+				done: boolean;
+			};
+			if (parsed.response) yield parsed.response;
+		}
+	}
+}

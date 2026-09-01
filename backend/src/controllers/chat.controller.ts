@@ -4,6 +4,7 @@ import { generateCompletion } from "../lib/llm/ollamaCompletion";
 import { hybridSearch } from "../lib/search/hybridSearch";
 import { rerank } from "../lib/reranker/rerankerClient";
 import { withWorkspace } from "../db/withWorkspace";
+import { generateCompletionStream } from "../lib/llm/ollamaCompletion";
 
 const CANDIDATE_POOL_SIZE = 20;
 const FINAL_TOP_K = 5;
@@ -102,20 +103,20 @@ export async function chatWithWorkspace(req: Request, res: Response) {
 			chunkIndex: c.chunkIndex,
 			content: c.content,
 		}));
-		
+
 		const savedConversationId = await withWorkspace(
 			workspaceId,
 			async (tx) => {
-				const convo = conversationId
+				let convo = conversationId
 					? await tx.conversation.findUnique({
 							where: { id: conversationId },
 						})
-					: await tx.conversation.create({
-							data: { workspaceId, title: question.slice(0, 80) },
-						});
+					: null;
 
 				if (!convo) {
-					throw new Error("conversation not found");
+					convo = await tx.conversation.create({
+						data: { workspaceId, title: question.slice(0, 80) },
+					});
 				}
 
 				await tx.message.create({
@@ -147,5 +148,135 @@ export async function chatWithWorkspace(req: Request, res: Response) {
 	} catch (err) {
 		console.error(err);
 		return res.status(500).json({ error: "internal server error" });
+	}
+}
+
+export async function chatWithWorkspaceStream(req: Request, res: Response) {
+	const { workspaceId } = req.params;
+	const { question, chunkingStrategy, conversationId } = req.body;
+
+	if (!workspaceId || Array.isArray(workspaceId)) {
+		return res.status(400).json({ error: "workspaceId is required" });
+	}
+	if (!question || typeof question !== "string") {
+		return res.status(400).json({ error: "question is required" });
+	}
+	const strategy =
+		chunkingStrategy === "structure_aware" ? "structure_aware" : "fixed";
+
+	// SSE headers - tells the browser this is a long-lived, streaming
+	// response, not a normal JSON reply it should wait to fully receive.
+	res.setHeader("Content-Type", "text/event-stream");
+	res.setHeader("Cache-Control", "no-cache");
+	res.setHeader("Connection", "keep-alive");
+	res.flushHeaders();
+
+	try {
+		const queryEmbedding = await generateEmbedding(question);
+
+		const candidates = await withWorkspace(workspaceId, (tx) =>
+			hybridSearch(
+				tx,
+				workspaceId,
+				question,
+				queryEmbedding,
+				strategy,
+				CANDIDATE_POOL_SIZE,
+			),
+		);
+
+		if (candidates.length === 0) {
+			res.write(
+				`data: ${JSON.stringify({ type: "token", text: "No relevant documents were found for this question." })}\n\n`,
+			);
+			res.write(
+				`data: ${JSON.stringify({ type: "done", sources: [], conversationId: conversationId ?? null })}\n\n`,
+			);
+			return res.end();
+		}
+
+		const reranked = await rerank(
+			question,
+			candidates.map((c) => ({ id: c.id, content: c.content })),
+			FINAL_TOP_K,
+		);
+
+		const contentById = new Map(candidates.map((c) => [c.id, c]));
+		const topChunks = reranked.map((r) => contentById.get(r.id)!);
+
+		let history: { role: string; content: string }[] = [];
+		if (conversationId) {
+			history = await withWorkspace(workspaceId, (tx) =>
+				tx.message.findMany({
+					where: { conversationId },
+					orderBy: { createdAt: "asc" },
+					take: 10,
+					select: { role: true, content: true },
+				}),
+			);
+		}
+
+		const prompt = buildPrompt(question, topChunks, history);
+
+		let fullAnswer = "";
+		for await (const piece of generateCompletionStream(prompt)) {
+			fullAnswer += piece;
+			res.write(
+				`data: ${JSON.stringify({ type: "token", text: piece })}\n\n`,
+			);
+		}
+
+		const sources = topChunks.map((c, i) => ({
+			chunkNumber: i + 1,
+			id: c.id,
+			chunkIndex: c.chunkIndex,
+			content: c.content,
+		}));
+
+		const savedConversationId = await withWorkspace(
+			workspaceId,
+			async (tx) => {
+				let convo = conversationId
+					? await tx.conversation.findUnique({
+							where: { id: conversationId },
+						})
+					: null;
+				
+				if (!convo) {
+					convo = await tx.conversation.create({
+						data: { workspaceId, title: question.slice(0, 80) },
+					});
+				}
+
+				await tx.message.create({
+					data: {
+						conversationId: convo.id,
+						role: "user",
+						content: question,
+					},
+				});
+				await tx.message.create({
+					data: {
+						conversationId: convo.id,
+						role: "assistant",
+						content: fullAnswer,
+						sources,
+					},
+				});
+
+				return convo.id;
+			},
+		);
+
+		res.write(
+			`data: ${JSON.stringify({ type: "done", sources, conversationId: savedConversationId })}\n\n`,
+		);
+		res.end();
+	} catch (err) {
+		console.error(err);
+		res.write(
+			`data: ${JSON.stringify({ type: "error", message: "internal server error" })}\n\n`,
+		);
+		res.end();
 	}
 }
