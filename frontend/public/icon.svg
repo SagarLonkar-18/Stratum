@@ -1,0 +1,10 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <rect width="512" height="512" rx="112" fill="#151917"/>
+  <!-- Three overlapping regions - the same isolation-echo mark used in the
+       app's own auth screen, simplified to solid fills so it survives
+       down to 16px. Two neutral squares plus one verified-green square,
+       reading as both "layered/strata" and "isolated regions" at once. -->
+  <rect x="70" y="108" width="220" height="220" rx="28" fill="#3d463e"/>
+  <rect x="146" y="184" width="220" height="220" rx="28" fill="#2a322c"/>
+  <rect x="222" y="108" width="220" height="220" rx="28" fill="#6fa88a"/>
+</svg>
