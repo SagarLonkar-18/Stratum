@@ -73,6 +73,15 @@ export async function chatWithWorkspace(req: Request, res: Response) {
 			),
 		);
 
+		if (candidates.length === 0) {
+			return res.status(200).json({
+				question,
+				answer: "No relevant documents were found for this question. Try uploading a document or asking something related to what's already in this workspace.",
+				sources: [],
+				conversationId: conversationId ?? null,
+			});
+		}
+
 		const reranked = await rerank(
 			question,
 			candidates.map((c) => ({ id: c.id, content: c.content })),
@@ -241,7 +250,7 @@ export async function chatWithWorkspaceStream(req: Request, res: Response) {
 							where: { id: conversationId },
 						})
 					: null;
-				
+
 				if (!convo) {
 					convo = await tx.conversation.create({
 						data: { workspaceId, title: question.slice(0, 80) },

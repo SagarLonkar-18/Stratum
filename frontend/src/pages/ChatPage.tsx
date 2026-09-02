@@ -469,13 +469,23 @@ export function ChatPage() {
 						<input
 							value={question}
 							onChange={(e) => setQuestion(e.target.value)}
-							placeholder="Ask a question about the uploaded documents…"
-							disabled={!!pendingQuestion}
+							placeholder={
+								documents.length === 0
+									? "Upload a document first to start asking questions…"
+									: "Ask a question about the uploaded documents…"
+							}
+							disabled={
+								!!pendingQuestion || documents.length === 0
+							}
 							className="flex-1 bg-base-850 border border-base-600 rounded-md px-3 py-2 text-sm text-ink-100 outline-none focus:border-verified-500 transition-colors disabled:opacity-50"
 						/>
 						<button
 							type="submit"
-							disabled={!!pendingQuestion || !question.trim()}
+							disabled={
+								!!pendingQuestion ||
+								!question.trim() ||
+								documents.length === 0
+							}
 							className="bg-verified-500 hover:bg-verified-400 disabled:opacity-40 text-base-950 rounded-md px-3.5 transition-colors flex items-center justify-center"
 						>
 							{pendingQuestion ? (
